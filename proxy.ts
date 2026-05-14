@@ -22,9 +22,7 @@ export default function proxy(request: NextRequest) {
 
   // ✅ redirect si no logeado
   if (!sessionToken) {
-    const loginUrl = new URL("/login", request.url)
-    loginUrl.searchParams.set("callbackUrl", pathname)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.next()
   }
 
   return NextResponse.next()
