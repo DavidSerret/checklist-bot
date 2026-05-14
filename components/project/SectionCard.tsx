@@ -1,14 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Section, SubsectionNode, Task, computeSectionProgress, getProgressHex, collectAllSectionTasks } from "@/types"
+import { Section, SubsectionNode, Task, DbUser, computeSectionProgress, getProgressHex, collectAllSectionTasks } from "@/types"
 import { TaskCard } from "./TaskCard"
 import { SubsectionCard } from "./SubsectionCard"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 import { Tooltip } from "@/components/ui/Tooltip"
+import { AssigneePicker, AssigneeStack } from "@/components/ui/AssigneePicker"
 import { CreateTaskModal } from "@/components/modals/CreateTaskModal"
 import { CreateSubsectionModal } from "@/components/modals/CreateSubsectionModal"
-import { ChevronDown, Plus, Trash2, Layers } from "lucide-react"
+import { ChevronDown, Plus, Trash2, Layers, UserPlus } from "lucide-react"
 import { Subsection } from "@/types"
 
 type SectionWithData = Section & {
@@ -30,11 +31,14 @@ export function SectionCard({ section: initial, onUpdated, onDeleted }: Props) {
   const [showAddSub, setShowAddSub] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [editName, setEditName] = useState(section.name)
+  const [localAssignees, setLocalAssignees] = useState<DbUser[]>(initial.assignees ?? [])
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false)
 
   useEffect(() => {
     setSection(initial)
     setCompletionMap({})
     setEditName(initial.name)
+    setLocalAssignees(initial.assignees ?? [])
   }, [initial])
 
   async function saveName() {
@@ -46,6 +50,16 @@ export function SectionCard({ section: initial, onUpdated, onDeleted }: Props) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: trimmed }),
+    })
+  }
+
+  async function handleAssigneesChange(users: DbUser[]) {
+    setLocalAssignees(users)
+    setShowAssigneePicker(false)
+    await fetch(`/api/sections/${section.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigned_to: users.map((u) => u.discord_id) }),
     })
   }
 
@@ -116,6 +130,28 @@ export function SectionCard({ section: initial, onUpdated, onDeleted }: Props) {
         <span className="min-w-[3rem] text-right text-sm font-semibold" style={{ color }}>
           {pct}%
         </span>
+
+        {/* Assignees */}
+        <div className="relative">
+          {localAssignees.length > 0 ? (
+            <button onClick={() => setShowAssigneePicker((p) => !p)} title="Edit assignees">
+              <AssigneeStack assignees={localAssignees} />
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAssigneePicker((p) => !p)}
+              className="rounded-lg p-1.5 text-[#B5BAC1] hover:text-[#5865F2] transition"
+              title="Assign section"
+            >
+              <UserPlus className="h-4 w-4" />
+            </button>
+          )}
+          {showAssigneePicker && (
+            <div className="absolute right-0 top-8 z-50 w-60 rounded-xl border border-[#383A40] bg-[#2B2D31] p-2 shadow-xl">
+              <AssigneePicker selected={localAssignees} onChange={handleAssigneesChange} />
+            </div>
+          )}
+        </div>
 
         <button
           onClick={() => setShowAddSub(true)}

@@ -23,11 +23,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .from("tasks")
     .update(updates)
     .eq("id", id)
-    .select("*, assignee:users!tasks_assigned_to_fkey(discord_id,username,avatar_url)")
+    .select("*")
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  const ids: string[] = data.assigned_to ?? []
+  let assignees: unknown[] = []
+  if (ids.length) {
+    const { data: users } = await db
+      .from("users")
+      .select("id, discord_id, username, avatar_url, created_at")
+      .in("discord_id", ids)
+    assignees = users ?? []
+  }
+
+  return NextResponse.json({ ...data, assignees })
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {

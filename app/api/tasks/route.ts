@@ -24,9 +24,20 @@ export async function POST(req: NextRequest) {
       assigned_to: assigned_to ?? null,
       weight: 1,
     })
-    .select("*, assignee:users!tasks_assigned_to_fkey(discord_id,username,avatar_url)")
+    .select("*")
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data, { status: 201 })
+
+  const ids: string[] = data.assigned_to ?? []
+  let assignees: unknown[] = []
+  if (ids.length) {
+    const { data: users } = await db
+      .from("users")
+      .select("id, discord_id, username, avatar_url, created_at")
+      .in("discord_id", ids)
+    assignees = users ?? []
+  }
+
+  return NextResponse.json({ ...data, assignees }, { status: 201 })
 }

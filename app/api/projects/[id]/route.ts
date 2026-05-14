@@ -12,15 +12,19 @@ function buildSubsectionTree(
   allSubs: RawSubsection[],
   allTasks: RawTask[],
   sectionId: string,
-  parentId: string | null
+  parentId: string | null,
+  attachFn?: (item: RawSubsection) => unknown
 ): unknown[] {
   return allSubs
     .filter((ss) => ss.section_id === sectionId && (ss.parent_id ?? null) === parentId)
-    .map((ss) => ({
-      ...ss,
-      tasks: allTasks.filter((t) => t.subsection_id === ss.id),
-      children: buildSubsectionTree(allSubs, allTasks, sectionId, ss.id),
-    }))
+    .map((ss) => {
+      const node = {
+        ...ss,
+        tasks: allTasks.filter((t) => t.subsection_id === ss.id),
+        children: buildSubsectionTree(allSubs, allTasks, sectionId, ss.id, attachFn),
+      }
+      return attachFn ? attachFn(node as unknown as RawSubsection) : node
+    })
 }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -53,19 +57,47 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       .order("order"),
     db
       .from("tasks")
-      .select("*, assignee:users!tasks_assigned_to_fkey(discord_id,username,avatar_url)")
+      .select("*")
       .in("section_id", sectionIds.length ? sectionIds : [""]),
   ])
 
   const allSubs = (subsections ?? []) as RawSubsection[]
   const allTasks = (tasks ?? []) as RawTask[]
 
+  // Collect all unique discord_ids across tasks, sections, subsections
+  const discordIds = new Set<string>()
+  allTasks.forEach((t) => ((t.assigned_to as string[] | null) ?? []).forEach((id) => discordIds.add(id)))
+  ;(sections ?? []).forEach((s) => ((s.assigned_to as string[] | null) ?? []).forEach((id) => discordIds.add(id)))
+  allSubs.forEach((ss) => ((ss.assigned_to as string[] | null) ?? []).forEach((id) => discordIds.add(id)))
+
+  const userMap = new Map<string, Record<string, unknown>>()
+  if (discordIds.size > 0) {
+    const { data: users } = await db
+      .from("users")
+      .select("id, discord_id, username, avatar_url, created_at")
+      .in("discord_id", [...discordIds])
+    ;(users ?? []).forEach((u) => userMap.set(u.discord_id, u))
+  }
+
+  function attachAssignees(item: Record<string, unknown>): Record<string, unknown> {
+    const ids = (item.assigned_to as string[] | null) ?? []
+    return { ...item, assignees: ids.map((id) => userMap.get(id)).filter(Boolean) }
+  }
+
+  const tasksWithAssignees = allTasks.map((t) => attachAssignees(t as unknown as Record<string, unknown>))
+
   const sectionsWithData = (sections ?? []).map((section) => {
-    const directTasks = allTasks.filter(
-      (t) => t.section_id === section.id && !t.subsection_id
+    const directTasks = tasksWithAssignees.filter(
+      (t) => (t as RawTask).section_id === section.id && !(t as RawTask).subsection_id
     )
-    const subsectionTree = buildSubsectionTree(allSubs, allTasks, section.id, null)
-    return { ...section, tasks: directTasks, subsections: subsectionTree }
+    const subsectionTree = buildSubsectionTree(
+      allSubs,
+      tasksWithAssignees as unknown as RawTask[],
+      section.id,
+      null,
+      (item) => attachAssignees(item as unknown as Record<string, unknown>)
+    )
+    return attachAssignees({ ...section, tasks: directTasks, subsections: subsectionTree } as Record<string, unknown>)
   })
 
   return NextResponse.json({ ...project, sections: sectionsWithData })

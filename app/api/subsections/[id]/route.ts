@@ -12,9 +12,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const { id } = await params
   const body = await req.json()
   const db = supabaseAdmin()
+  const updates: Record<string, unknown> = {}
+  if (body.name !== undefined) updates.name = body.name
+  if (body.description !== undefined) updates.description = body.description
+  if (body.order !== undefined) updates.order = body.order
+  if (body.assigned_to !== undefined) updates.assigned_to = body.assigned_to
+
   const { data, error } = await db
     .from("subsections")
-    .update({ name: body.name, description: body.description, order: body.order })
+    .update(updates)
     .eq("id", id)
     .select()
     .single()

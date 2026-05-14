@@ -24,6 +24,8 @@ export interface Section {
   sprint: string
   order: number
   created_at: string
+  assigned_to: string[] | null
+  assignees?: DbUser[]
 }
 
 export interface Subsection {
@@ -34,6 +36,8 @@ export interface Subsection {
   parent_id: string | null
   order: number
   created_at: string
+  assigned_to: string[] | null
+  assignees?: DbUser[]
 }
 
 export interface SubsectionNode extends Subsection {
@@ -48,10 +52,10 @@ export interface Task {
   title: string
   description: string | null
   completed: boolean
-  assigned_to: string | null
+  assigned_to: string[] | null
   weight: number
   created_at: string
-  assignee?: DbUser | null
+  assignees?: DbUser[]
 }
 
 export type ProgressColor = 'red' | 'yellow' | 'orange' | 'green'

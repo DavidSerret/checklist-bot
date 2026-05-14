@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Task } from "@/types"
+import { Task, DbUser } from "@/types"
 import { Tooltip } from "@/components/ui/Tooltip"
-import { Trash2 } from "lucide-react"
+import { AssigneePicker, AssigneeStack } from "@/components/ui/AssigneePicker"
+import { Trash2, UserPlus } from "lucide-react"
 
 interface Props {
   task: Task
@@ -15,6 +16,8 @@ export function TaskCard({ task, onToggle, onDelete }: Props) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.title)
   const [localTitle, setLocalTitle] = useState(task.title)
+  const [localAssignees, setLocalAssignees] = useState<DbUser[]>(task.assignees ?? [])
+  const [showPicker, setShowPicker] = useState(false)
 
   async function saveTitle() {
     const trimmed = editValue.trim()
@@ -28,8 +31,21 @@ export function TaskCard({ task, onToggle, onDelete }: Props) {
     })
   }
 
+  async function handleAssigneesChange(users: DbUser[]) {
+    setLocalAssignees(users)
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigned_to: users.map((u) => u.discord_id) }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setLocalAssignees(data.assignees ?? [])
+    }
+  }
+
   return (
-    <div className="group flex items-center gap-3 rounded-xl border border-transparent bg-[#383A40] px-3 py-2.5 transition hover:border-[#5865F2]/30">
+    <div className="group relative flex items-center gap-3 rounded-xl border border-transparent bg-[#383A40] px-3 py-2.5 transition hover:border-[#5865F2]/30">
       {/* Checkbox */}
       <button
         onClick={() => onToggle(task.id, !task.completed)}
@@ -54,7 +70,10 @@ export function TaskCard({ task, onToggle, onDelete }: Props) {
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={saveTitle}
-          onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") { setEditing(false); setEditValue(localTitle) } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveTitle()
+            if (e.key === "Escape") { setEditing(false); setEditValue(localTitle) }
+          }}
           className="flex-1 rounded-lg border border-[#5865F2]/60 bg-[#2B2D31] px-2 py-0.5 text-sm text-white outline-none"
         />
       ) : (
@@ -69,27 +88,36 @@ export function TaskCard({ task, onToggle, onDelete }: Props) {
         </Tooltip>
       )}
 
-      {/* Assignee */}
-      {task.assignee && (
-        <div className="flex items-center gap-1.5 shrink-0">
-          {task.assignee.avatar_url ? (
-            <img
-              src={task.assignee.avatar_url}
-              alt={task.assignee.username}
-              className="h-5 w-5 rounded-full"
-              title={task.assignee.username}
+      {/* Assignees */}
+      <div className="relative shrink-0">
+        {localAssignees.length > 0 ? (
+          <button
+            onClick={() => setShowPicker((p) => !p)}
+            className="flex items-center"
+            title="Edit assignees"
+          >
+            <AssigneeStack assignees={localAssignees} />
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowPicker((p) => !p)}
+            className="rounded-lg p-1 text-[#B5BAC1] opacity-0 transition hover:text-[#5865F2] group-hover:opacity-100"
+            title="Assign"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {showPicker && (
+          <div className="absolute right-0 top-7 z-50 w-56 rounded-xl border border-[#383A40] bg-[#313338] p-2 shadow-xl">
+            <AssigneePicker
+              selected={localAssignees}
+              onChange={(users) => { handleAssigneesChange(users); setShowPicker(false) }}
+              placeholder="Search users…"
             />
-          ) : (
-            <div
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-[#5865F2] text-[10px] font-bold text-white"
-              title={task.assignee.username}
-            >
-              {task.assignee.username[0].toUpperCase()}
-            </div>
-          )}
-          <span className="hidden text-xs text-[#B5BAC1] sm:block">{task.assignee.username}</span>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Delete */}
       <button

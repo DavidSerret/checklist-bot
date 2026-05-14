@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { SubsectionNode, Task, computeSectionProgress, getProgressHex, collectNodeTasks, Subsection } from "@/types"
+import { useState, useEffect } from "react"
+import { SubsectionNode, Task, DbUser, computeSectionProgress, getProgressHex, collectNodeTasks, Subsection } from "@/types"
 import { TaskCard } from "./TaskCard"
 import { Tooltip } from "@/components/ui/Tooltip"
+import { AssigneePicker, AssigneeStack } from "@/components/ui/AssigneePicker"
 import { CreateTaskModal } from "@/components/modals/CreateTaskModal"
 import { CreateSubsectionModal } from "@/components/modals/CreateSubsectionModal"
-import { ChevronDown, Plus, Trash2, Layers } from "lucide-react"
+import { ChevronDown, Plus, Trash2, Layers, UserPlus } from "lucide-react"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 
 interface Props {
@@ -25,6 +26,14 @@ export function SubsectionCard({ node, sectionId, depth, completionMap, onTaskTo
   const [editingName, setEditingName] = useState(false)
   const [editName, setEditName] = useState(node.name)
   const [localName, setLocalName] = useState(node.name)
+  const [localAssignees, setLocalAssignees] = useState<DbUser[]>(node.assignees ?? [])
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false)
+
+  useEffect(() => {
+    setLocalAssignees(node.assignees ?? [])
+    setLocalName(node.name)
+    setEditName(node.name)
+  }, [node])
 
   async function saveName() {
     const trimmed = editName.trim()
@@ -35,6 +44,16 @@ export function SubsectionCard({ node, sectionId, depth, completionMap, onTaskTo
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: trimmed }),
+    })
+  }
+
+  async function handleAssigneesChange(users: DbUser[]) {
+    setLocalAssignees(users)
+    setShowAssigneePicker(false)
+    await fetch(`/api/subsections/${node.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigned_to: users.map((u) => u.discord_id) }),
     })
   }
 
@@ -92,6 +111,28 @@ export function SubsectionCard({ node, sectionId, depth, completionMap, onTaskTo
         )}
 
         <span className="text-xs font-medium" style={{ color }}>{pct}%</span>
+
+        {/* Assignees */}
+        <div className="relative">
+          {localAssignees.length > 0 ? (
+            <button onClick={() => setShowAssigneePicker((p) => !p)} title="Edit assignees">
+              <AssigneeStack assignees={localAssignees} size="sm" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAssigneePicker((p) => !p)}
+              className="rounded-lg p-1 text-[#B5BAC1] hover:text-[#5865F2] transition"
+              title="Assign subsection"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {showAssigneePicker && (
+            <div className="absolute right-0 top-7 z-50 w-56 rounded-xl border border-[#383A40] bg-[#313338] p-2 shadow-xl">
+              <AssigneePicker selected={localAssignees} onChange={handleAssigneesChange} />
+            </div>
+          )}
+        </div>
 
         <button
           onClick={() => setShowAddSub(true)}
